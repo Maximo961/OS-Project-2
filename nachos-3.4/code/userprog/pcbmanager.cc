@@ -1,11 +1,11 @@
 #include "pcbmanager.h"
 
 
-PCBManager::PCBManager(int maxProcesses) {
-
+PCBManager::PCBManager(int maxProcesses):maxProcesses(maxProcesses) {
+    this->maxProcesses = maxProcesses;
     bitmap = new BitMap(maxProcesses);
     pcbs = new PCB*[maxProcesses];
-
+    pcbManagerLock = new Lock("PCBManagerLock");
     for(int i = 0; i < maxProcesses; i++) {
         pcbs[i] = NULL;
     }
@@ -14,10 +14,13 @@ PCBManager::PCBManager(int maxProcesses) {
 
 
 PCBManager::~PCBManager() {
-
+ for (int i = 0; i < maxProcesses; i++) {
+        delete pcbs[i];
+    }
+     delete[] pcbs;
     delete bitmap;
 
-    delete pcbs;
+    
 
 }
 
@@ -25,11 +28,13 @@ PCBManager::~PCBManager() {
 PCB* PCBManager::AllocatePCB() {
 
     // Aquire pcbManagerLock
-
+    pcbManagerLock->Acquire();
+    //printf("Made it to Acquire Allocate\n");
     int pid = bitmap->Find();
 
     // Release pcbManagerLock
-
+    pcbManagerLock->Release();
+    //printf("Made it to Release allocate\n");
     ASSERT(pid != -1);
 
     pcbs[pid] = new PCB(pid);
@@ -42,14 +47,19 @@ PCB* PCBManager::AllocatePCB() {
 int PCBManager::DeallocatePCB(PCB* pcb) {
 
     // Check is pcb is valid -- check pcbs for pcb->pid
-
-     // Aquire pcbManagerLock
-
-    bitmap->Clear(pcb->pid);
+    int pid = pcb->pid;
+if(pid < 0 || pid >= maxProcesses) {
+    printf("Invalid PID\n");
+    return -1;
+}
+      //Aquire pcbManagerLock
+    pcbManagerLock->Acquire();
+    //printf("Made it to acquire deallocate\n");
+    bitmap->Clear(pid);
 
     // Release pcbManagerLock
-
-    int pid = pcb->pid;
+    pcbManagerLock->Release();
+     //printf("Made it to release\n");
 
     delete pcbs[pid];
 
