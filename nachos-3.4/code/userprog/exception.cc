@@ -25,7 +25,7 @@
 #include "system.h"
 #include "syscall.h"
 #include "system.h"
-
+#include "pcbmanager.h"
 //----------------------------------------------------------------------
 // ExceptionHandler
 // 	Entry point into the Nachos kernel.  Called when a user program
@@ -51,8 +51,9 @@
 
 
 void doExit(int status) {
-
-    int pid = 99;
+// Manage PCB memory As a parent process
+    PCB* pcb = currentThread->space->pcb;
+    int pid = currentThread->space->pcb->pid;
 
     printf("System Call: [%d] invoked [Exit]\n", pid);
     printf ("Process [%d] exits with [%d]\n", pid, status);
@@ -60,22 +61,29 @@ void doExit(int status) {
 
     currentThread->space->pcb->exitStatus = status;
 
-    // Manage PCB memory As a parent process
-    PCB* pcb = currentThread->space->pcb;
-
+    
+     
+if (pcb->parent != NULL) {
+        pcb->parent->RemoveChild(pcb);
+        printf("I HAVE REACHED REMOVE CHILD, I EXIST AT 68");
+    }
     // Delete exited children and set parent null for non-exited ones
     pcb->DeleteExitedChildrenSetParentNull();
+    
 
     // Manage PCB memory As a child process
     if(pcb->parent == NULL) pcbManager->DeallocatePCB(pcb);
+    
 
     // Delete address space only after use is completed
     delete currentThread->space;
-
+    
     // Finish current thread only after all the cleanup is done
     // because currentThread marks itself to be destroyed (by a different thread)
     // and then puts itself to sleep -- thus anything after this statement will not be executed!
+    
     currentThread->Finish();
+    
 
 }
 
@@ -92,55 +100,80 @@ void childFunction(int pid) {
 
     // 1. Restore the state of registers
     // currentThread->RestoreUserState()
+    currentThread->RestoreUserState();
 
     // 2. Restore the page table for child
     // currentThread->space->RestoreState()
-
+    currentThread->space->RestoreState();
     // PCReg == machine->ReadRegister(PCReg)
+    //int PCReg == machine->ReadRegister(PCReg);
     // print message for child creation (pid,  PCReg, currentThread->space->GetNumPages())
+    printf ("Process [%d] in child registry[%d] and num page [%d]\n", pid, PCReg, currentThread->space->GetNumPages());
 
     // machine->Run();
+    machine->Run();
 
 }
 
 int doFork(int functionAddr) {
-
+    int pid = currentThread->space->pcb->pid;
+    int exitStatus = currentThread->space->pcb->exitStatus;
+    unsigned int numParentPages = currentThread->space->GetNumPages();
+    unsigned int freePages = mm->GetFreePageCount();
     // 1. Check if sufficient memory exists to create new process
     // currentThread->space->GetNumPages() <= mm->GetFreePageCount()
     // if check fails, return -1
-
-    // 2. SaveUserState for the parent thread
+        // 2. SaveUserState for the parent thread
     // currentThread->SaveUserState();
-
+     currentThread->SaveUserState();
+    printf("System Call: [%d] invoked Fork\n", pid);
+    printf ("Process [%d] Fork: starts at address [0x%x] with  [%d] pages memory\n", pid, functionAddr,numParentPages);
     // 3. Create a new address space for child by copying parent address space
     // Parent: currentThread->space
     // childAddrSpace: new AddrSpace(currentThread->space)
-
-    // 4. Create a new thread for the child and set its addrSpace
+    AddrSpace* childAddrSpace =  new AddrSpace(currentThread->space);
+    // 4. Create a new thread for the child andF set its addrSpace
     // childThread = new Thread("childThread")
     // child->space = childAddSpace;
-
+    Thread* childThread = new Thread("childThread");
+    childThread->space = childAddrSpace;
     // 5. Create a PCB for the child and connect it all up
     // pcb: pcbManager->AllocatePCB();
     // pcb->thread = childThread
     // set parent for child pcb
     // add child for parent pcb
+    PCB* pcb = pcbManager->AllocatePCB();
+    childThread->space->pcb=pcb;
+    pcb->thread = childThread;
+    PCB* parent;
+    pcb->AddChild(pcb);
 
     // 6. Set up machine registers for child and save it to child thread
     // PCReg: functionAddr
     // PrevPCReg: functionAddr-4
     // NextPCReg: functionAddr+4
     // childThread->SaveUserState();
+    //PCreg: functionAddr;
+    //PrevPCRreg: functionAddr-4;
+    //NextPCReg: functionAddr+4;
+    machine->WriteRegister(PCReg, functionAddr); 
+    machine->WriteRegister(PrevPCReg, functionAddr - 4); 
+    machine->WriteRegister(NextPCReg, functionAddr + 4);
+    childThread->SaveUserState();
 
     // 7. Restore register state of parent user-level process
     // currentThread->RestoreUserState()
-
+    currentThread->RestoreUserState();
     // 8. Call thread->fork on Child
     // childThread->Fork(childFunction, pcb->pid)
-
+    childThread->Fork(childFunction,pcb->pid);
     // 9. return pcb->pid;
-
-}
+    //printf("Process [%d] exits with [%d]\n", pid, exitStatus);
+    return pcb->pid;
+    //} else {
+      //  printf("DEBUG FAILED MEMORY LINE 173 EXCEPTION.CC\n");
+      //  return -1;
+    }
 
 int doExec(char* filename) {
 
@@ -237,6 +270,10 @@ int doKill (int pid) {
 
 
 void doYield() {
+      PCB* pcb = currentThread->space->pcb;
+    int pid = currentThread->space->pcb->pid;
+
+    printf("System Call: [%d] invoked [Yield]\n", pid);
     currentThread->Yield();
 }
 

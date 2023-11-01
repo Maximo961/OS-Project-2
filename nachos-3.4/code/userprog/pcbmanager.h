@@ -3,9 +3,9 @@
 
 #include "bitmap.h"
 #include "pcb.h"
-
+#include "synch.h"
 class PCB;
-
+class Lock;
 class PCBManager {
 
     public:
@@ -19,9 +19,12 @@ class PCBManager {
     private:
         BitMap* bitmap;
         PCB** pcbs;
+         Lock* pcbManagerLock;
+         int maxProcesses;
         // Need a lock here
         // Lock* pcbManagerLock;
-
+        
+         
 };
 
 #endif // PCBMANAGER_H
